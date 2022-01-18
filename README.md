@@ -1,7 +1,8 @@
 # X-Ways-HashExporter-Extension
 This X-Ways Forensics extension automates the export of hashes from an image
 While the extension could be run from the X-Ways gui, it can also be run from the command-line.
-D:\XWAYS>"c:\Program Files\X-Ways Forensics\xwb64.exe" "NewCase:D:\XWAYS\test" "AddImage:d:\XWAYS\testdisk.img" "XT:D:\XWAYS\XT_HashExporter.dll" RVS:~ auto
+
+<code>D:\XWAYS>"c:\Program Files\X-Ways Forensics\xwb64.exe" "NewCase:D:\XWAYS\test" "AddImage:d:\XWAYS\testdisk.img" "XT:D:\XWAYS\XT_HashExporter.dll" RVS:~ auto</code>
 
 
 ## License
