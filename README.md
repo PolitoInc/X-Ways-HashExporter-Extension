@@ -12,4 +12,4 @@ Polito Inc. is providing the HashExporter extension ("this Software") for free f
 <p> After running plugin, output of results are in a file : casename_Hashes.txt
 <p>
 <!-- See blog post here for more details and instructions for how to use this extension in X-Ways: -->
-<!-- <img src="./image%20(2).png"> -->
+<!-- <img src="./x-ways-hashing.gif"> -->
