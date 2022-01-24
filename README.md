@@ -6,7 +6,7 @@ While the extension could be run from the X-Ways gui, it can also be run from th
 
 
 ## License
-Polito Inc. is providing the HashExporter extension ("this Software") for free for the benefit of the Digital Forensics community. This Software is provided "as is", without any warranty of any kind, express or implied. You may copy, distribute, and use this Software without charge for commercial or non-commercial purposes, provided that you give full credit to its source and you do not sell, rent, or lease it; do not reverse engineer, decompile, or dissassmeble it; and do not use it for any illegal purpose. While we are unable to provide support for this Software, feel free to contact us at  <b>info(at)politoinc.com</b>  with any bug reports or feature requests.
+Polito Inc. is providing the HashExporter extension ("this Software") for free for the benefit of the Digital Forensics community. This Software is provided "as is", without any warranty of any kind, express or implied. You may copy, distribute, and use this Software without charge for commercial or non-commercial purposes, provided that you give full credit to its source and you do not sell, rent, or lease it. While we are unable to provide support for this Software, feel free to contact us at  <b>info(at)politoinc.com</b>  with any bug reports or feature requests. Also feel free to contact us if you have suggestions for other X-Ways extensions. 
 <p>Hashes of the files : 
 
 <p>  MD5      9C54E8F431983CEA3D8BF298898A6BEA                 XT_HashExporter.dll
