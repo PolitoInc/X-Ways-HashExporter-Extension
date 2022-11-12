@@ -6,12 +6,20 @@
 HANDLE hOutputFile = INVALID_HANDLE_VALUE;
 
 LONG XT_Init(DWORD nVersion, DWORD nFlags, HANDLE hMainWnd, struct LicenseInfo* pLicInfo) {
+	LONG nResult = 1;
+
 	if (XT_RetrieveFunctionPointers() > 0) {
 		// Check that the function pointers we need are available else return -1
 		return -1;
 	}
 
-	return 1;	// TODO: If we are thread safe, return 2
+	// Check version. We need 19.7 or later.
+	if (!(HIWORD(nVersion) >= 19 && LOWORD(nVersion) >= 70)) {
+		XWF_OutputMessage(L"Error: X-Ways Forensics v19.7 or greater is required for this plugin.", 0);
+		nResult = -1;
+	}
+
+	return nResult;	// TODO: If we are thread safe, return 2
 }
 
 LONG __stdcall XT_About(HANDLE hParentWnd, void* lpReserved) {
@@ -20,8 +28,6 @@ LONG __stdcall XT_About(HANDLE hParentWnd, void* lpReserved) {
 }
 
 LONG __stdcall XT_Prepare(HANDLE hVolume, HANDLE hEvidence, DWORD nOpType, void* lpReserved) {
-	// TODO: Check version. We need 17.4 or later.
-	
 	// Get the Case title
 	wchar_t szCaseTitle[1024], szOutputFileName[1024];
 	ZeroMemory(szCaseTitle, 1024);
@@ -39,7 +45,7 @@ LONG __stdcall XT_Prepare(HANDLE hVolume, HANDLE hEvidence, DWORD nOpType, void*
 
 	// Set the primary hash type to MD5
 	BYTE hashType = 0x7;
-	INT64 nSetHashTypeResult = XWF_GetVSProp(XWF_VSPROP_SET_HASHTYPE1, &hashType);
+	INT64 nSetHashTypeResult = XWF_GetVSProp(XWF_VSPROP_SET_HASHTYPE1, &hashType); // Requires version 19.7 or higher
 	if (nSetHashTypeResult < 0) {
 		XWF_OutputMessage(L"Error computing hash value for evidence item.", 0);
 		return NULL;
@@ -82,7 +88,7 @@ LONG __stdcall XT_ProcessItemEx(LONG nItemID, HANDLE hItem, void* lpReserved) {
 	return 0;
 }
 
-LONG __stdcall XT_Finalize(HANDLE hVolume, HANDLE hEvidence, DWORD nOptType, PVOID lpReserved) {
+LONG __stdcall XT_Done(PVOID lpReserved) {
 	if (hOutputFile != INVALID_HANDLE_VALUE) {
 		CloseHandle(hOutputFile);
 	}
