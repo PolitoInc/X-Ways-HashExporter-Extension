@@ -29,32 +29,24 @@ LONG __stdcall XT_About(HANDLE hParentWnd, void* lpReserved) {
 
 LONG __stdcall XT_Prepare(HANDLE hVolume, HANDLE hEvidence, DWORD nOpType, void* lpReserved) {
 	// Get the Case title
-	wchar_t szCaseTitle[1024], szOutputFileName[1024];
-	ZeroMemory(szCaseTitle, 1024);
-	ZeroMemory(szOutputFileName, 1024);
-	INT64 iCaseTitleLen = XWF_GetCaseProp(NULL, XWF_CASEPROP_TITLE, szCaseTitle, 1024);
+	wchar_t szCaseTitle[MAX_PATH], szOutputFileName[MAX_PATH], szCaseDir[MAX_PATH];
+	ZeroMemory(szCaseTitle, MAX_PATH);
+	ZeroMemory(szOutputFileName, MAX_PATH);
+	ZeroMemory(szCaseDir, MAX_PATH);
 
-	if (iCaseTitleLen > 0) {
-		if (FAILED(StringCchPrintf(szOutputFileName, 1024, L"%s_Hashes.txt", szCaseTitle))) {
-			StringCchPrintf(szOutputFileName, 1024, L"UnknownCase_Hashes.txt");
-		}
-	}
-	else {
-		StringCchPrintf(szOutputFileName, 1024, L"UnknownCase_Hashes.txt");
-	}
+	INT64 iCaseTitleLen = XWF_GetCaseProp(NULL, XWF_CASEPROP_TITLE, szCaseTitle, MAX_PATH);
+	INT64 iCaseDirLen = XWF_GetCaseProp(NULL, XWF_CASEPROP_DIR, szCaseDir, MAX_PATH);
 
-	// Set the primary hash type to MD5
-	BYTE hashType = 0x7;
-	INT64 nSetHashTypeResult = XWF_GetVSProp(XWF_VSPROP_SET_HASHTYPE1, &hashType); // Requires version 19.7 or higher
-	if (nSetHashTypeResult < 0) {
-		XWF_OutputMessage(L"Error computing hash value for evidence item.", 0);
-		return NULL;
+	if (iCaseTitleLen > 0 && iCaseDirLen > 0) {
+		StringCchPrintf(szOutputFileName, 1024, L"%s\\%s_Hashes.txt", szCaseDir, szCaseTitle);
+		XWF_OutputMessage(szOutputFileName, 0);
 	}
 
 	// Initialize the handle to the output file
 	hOutputFile = CreateFile(szOutputFileName, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (hOutputFile == INVALID_HANDLE_VALUE) {
+		XWF_OutputMessage(L"Error opening output file.", 0);
 		return -4;	// -4 if you want X-Ways Forensics to stop the whole operation (e.g. volume snapshot refinement) altogether
 	}
 
@@ -64,21 +56,59 @@ LONG __stdcall XT_Prepare(HANDLE hVolume, HANDLE hEvidence, DWORD nOpType, void*
 	}
 
 	// Notify X-Ways that it should call XT_ProcessItemEx for each item in the volume snapshot
-	return XT_PREPARE_CALLPI;
+	XWF_OutputMessage(L"Calling processitem for each object", 0);
+	return XT_PREPARE_CALLPILATE | XT_PREPARE_CALLPI;
 }
 
 LONG __stdcall XT_ProcessItemEx(LONG nItemID, HANDLE hItem, void* lpReserved) {
-	// Get the hash value for this item
-	wchar_t* hashValue = GetHashString(nItemID, hItem);
+	// Buffer to hold the human-readable hash value
+	wchar_t* hashValue = NULL;
 	const wchar_t* crLf = L"\r\n";
+	int cchHashString = 0;
 
+	// Set the primary hash type to MD5
+	INT64 nHashType = XWF_GetVSProp(XWF_VSPROP_HASHTYPE1, NULL); // Requires version 19.7 or higher
+	if (nHashType != XWF_HASHTYPE_MD5 &&
+		nHashType != XWF_HASHTYPE_SHA1 &&
+		nHashType != XWF_HASHTYPE_SHA256) {
+		XWF_OutputMessage(L"Unsupported hash type for HASHTYPE1", 0);
+		return 0;
+	}
+
+	switch (nHashType) {
+	case XWF_HASHTYPE_MD5:
+		cchHashString = 32 + 1;
+		hashValue = (wchar_t*)malloc(cchHashString * sizeof(wchar_t));
+		break;
+	case XWF_HASHTYPE_SHA1:
+		cchHashString = 40 + 1;
+		hashValue = (wchar_t*)malloc(cchHashString * sizeof(wchar_t));
+		break;
+	case XWF_HASHTYPE_SHA256:
+		cchHashString = 64 + 1;
+		hashValue = (wchar_t*)malloc(cchHashString * sizeof(wchar_t));
+		break;
+	default:
+		break;
+	}
+	// Get the hash value for this item
+	if (hashValue != NULL && cchHashString > 0) {
+		ZeroMemory(hashValue, cchHashString * sizeof(wchar_t));
+		if (!GetHashString(nItemID, nHashType, hashValue, cchHashString)) {
+			XWF_OutputMessage(L"No Hash String for item.", 0);
+			return 0;
+		}
+	}
+	
 	if (hashValue == NULL) {
-		return -1;
+		XWF_OutputMessage(L"No hash value returned for item.", 0);
+		return 0;
 	}
 
 	// Write the file name and hash value to the output file
 	//StringCchPrintf(filenameAndHashBuffer, len, L"%s %s\n", fileName, hashValue);
 	DWORD dwNumWritten = 0;
+
 	WriteFile(hOutputFile, hashValue, (DWORD)(wcslen(hashValue) * sizeof(wchar_t)), &dwNumWritten, NULL);
 	WriteFile(hOutputFile, crLf, 4, &dwNumWritten, NULL);
 
@@ -96,48 +126,60 @@ LONG __stdcall XT_Done(PVOID lpReserved) {
 }
 
 // Function to convert the binary hash value to human readable format;
-// It is the responsibility of the caller to free the hash string when done
-wchar_t* GetHashString(LONG nItemID, HANDLE hItem) {
-	int bufSize = 16;	// 16 bytes for MD5
+// The provided buffer must be large enough to accommodate the requested hash format otherwise
+// this function will return an error code
+BOOL GetHashString(LONG nItemID, INT64 hashType, wchar_t* hashBuffer, size_t cchHashBuffer) {
+	size_t bufSize = 0;
+	BOOL bResult = FALSE;
+	BYTE* hashBuf = NULL;
+	DWORD dwOperation = 0x01; // Flag to XWF_GetHashValue; See https://www.x-ways.net/forensics/x-tensions/XWF_functions.html#A
+
+	switch (hashType) {
+	case 7:
+		bufSize = 16;		// MD5
+		break;
+	case 8:
+		bufSize = 20;		// SHA-1
+		break;
+	case 9:
+		bufSize = 32;		// SHA-256
+		break;
+	default:
+		return FALSE;		// Invalid
+	}
+
+	if (cchHashBuffer <= (bufSize * 2)) {
+		return FALSE;
+	}
 
 	// Get the hash value
-	// First, allocate a buffer to hold the hash value
-	BYTE* hashBuf = (BYTE*)malloc(bufSize);
+	hashBuf = (BYTE*)malloc(bufSize);
 	if (hashBuf == NULL) {
-		return NULL;
+		return FALSE;
 	}
 
-	// Zero out the buffer
 	ZeroMemory(hashBuf, bufSize);
-
-	// Copy the required values into the buffer
-	DWORD dwOperation = 0x11;	// 0x01 = retrieve primary hash value, 0x10 = compute hash value if not already calculated
-	memcpy(hashBuf, (const void*)&dwOperation, sizeof(DWORD));
-	memcpy(hashBuf + sizeof(DWORD), &hItem, sizeof(HANDLE));
-
-	// Ask XWF to compute the MD5 hash value and return it to us
-	XWF_GetHashValue(nItemID, hashBuf);
-
-	// String to hold the human-readable hash value
-	size_t len = (((size_t)bufSize * 2) + 1) * sizeof(wchar_t);
-	wchar_t* out = (wchar_t*)malloc(len);
-
-	// Check that our memory allocation succeeded
-	if (out == NULL) {
-		free(hashBuf);
-		return NULL;
+	memcpy(hashBuf, (const void*)&dwOperation, sizeof(DWORD)); // copy the operation to the buffer to tell X-Ways what we're doing
+	if (!XWF_GetHashValue(nItemID, hashBuf)) {
+		goto cleanup;
 	}
 
-	ZeroMemory(out, len);
+	// Copy the values into the provided buffer; first zero the buffer
+	ZeroMemory(hashBuffer, cchHashBuffer * sizeof(wchar_t));
 
 	// Convert to human readable string
-	int n;
+	size_t n;
 	for (n = 0; n < bufSize; ++n) {
-		StringCchPrintf(&(out[n * 2]), bufSize * 2, L"%02x", (unsigned int)hashBuf[n]);
+		if (SUCCEEDED(StringCchPrintf(&(hashBuffer[n * 2]), cchHashBuffer, L"%02x", (unsigned int)hashBuf[n]))) {
+			bResult = TRUE;
+		}
 	}
 
+cleanup:
+
+	// Free the heap vars
 	free(hashBuf);
 
-	// return the result
-	return out;
+	return bResult;
 }
+
