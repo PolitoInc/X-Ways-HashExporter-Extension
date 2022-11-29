@@ -19,15 +19,6 @@ LONG XT_Init(DWORD nVersion, DWORD nFlags, HANDLE hMainWnd, struct LicenseInfo* 
 		nResult = -1;
 	}
 
-	return nResult;	// TODO: If we are thread safe, return 2
-}
-
-LONG __stdcall XT_About(HANDLE hParentWnd, void* lpReserved) {
-	MessageBox((HWND)hParentWnd, L"Polito, Inc.\nCopyright 2021\nFile Hash Exporter X-Tension", L"Hash Exporter", MB_OK);
-	return 0;
-}
-
-LONG __stdcall XT_Prepare(HANDLE hVolume, HANDLE hEvidence, DWORD nOpType, void* lpReserved) {
 	// Get the Case title
 	wchar_t szCaseTitle[MAX_PATH], szOutputFileName[MAX_PATH], szCaseDir[MAX_PATH];
 	ZeroMemory(szCaseTitle, MAX_PATH);
@@ -55,8 +46,16 @@ LONG __stdcall XT_Prepare(HANDLE hVolume, HANDLE hEvidence, DWORD nOpType, void*
 		SetFilePointer(hOutputFile, 0, 0, FILE_END);
 	}
 
+	return nResult;	// TODO: If we are thread safe, return 2
+}
+
+LONG __stdcall XT_About(HANDLE hParentWnd, void* lpReserved) {
+	MessageBox((HWND)hParentWnd, L"Polito, Inc.\nCopyright 2021\nFile Hash Exporter X-Tension", L"Hash Exporter", MB_OK);
+	return 0;
+}
+
+LONG __stdcall XT_Prepare(HANDLE hVolume, HANDLE hEvidence, DWORD nOpType, void* lpReserved) {
 	// Notify X-Ways that it should call XT_ProcessItemEx for each item in the volume snapshot
-	XWF_OutputMessage(L"Calling processitem for each object", 0);
 	return XT_PREPARE_CALLPILATE | XT_PREPARE_CALLPI;
 }
 
